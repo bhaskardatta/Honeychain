@@ -344,6 +344,7 @@
             loadAttacks();
             loadBlockchain();
             loadPredictions();
+            loadFrequencyChart();
         }
         
         function updateStatus() {
@@ -499,6 +500,66 @@
                 });
         }
         
+        function loadFrequencyChart() {
+            fetch('/frequency')
+                .then(response => response.json())
+                .then(data => {
+                    updateFrequencyChart(data);
+                    document.getElementById('chartUpdated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                })
+                .catch(error => {
+                    console.error('Error loading frequency data:', error);
+                    document.getElementById('chartUpdated').innerHTML = '<div class="error-message">Failed to load chart data</div>';
+                });
+        }
+        
+        function updateFrequencyChart(data) {
+            const ctx = document.getElementById('frequencyChart').getContext('2d');
+            
+            if (frequencyChart) {
+                frequencyChart.destroy();
+            }
+            
+            frequencyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: 'Attacks per Hour',
+                        data: data.data || [],
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#00ff88',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    }
+                }
+            });
+        }
+        
         function updateAttackTypesChart(attackTypes) {
             const ctx = document.getElementById('attackTypesChart').getContext('2d');
             
@@ -510,7 +571,7 @@
             const data = Object.values(attackTypes);
             const colors = [
                 '#ff4444', '#ffaa00', '#ff6600', '#cc0066', 
-                '#00ff88', '#0088ff', '#8800ff', '#ff8800'
+                '#00ff88', '#00aaff', '#8800ff', '#ff8800'
             ];
             
             attackTypesChart = new Chart(ctx, {
@@ -520,8 +581,8 @@
                     datasets: [{
                         data: data,
                         backgroundColor: colors.slice(0, labels.length),
-                        borderWidth: 2,
-                        borderColor: '#ffffff'
+                        borderColor: '#ffffff',
+                        borderWidth: 2
                     }]
                 },
                 options: {
@@ -530,7 +591,11 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: { color: '#ffffff' }
+                            labels: { 
+                                color: '#ffffff',
+                                padding: 10,
+                                usePointStyle: true
+                            }
                         }
                     }
                 }
@@ -542,21 +607,37 @@
         }
         
         function exportData() {
-            fetch('/stats')
+            // Use the dedicated export endpoint for all attacks
+            fetch('/export')
                 .then(response => response.json())
                 .then(data => {
-                    const attacks = data.recent_attacks || [];
-                    let csv = 'Timestamp,Type,Source IP,Path,Payload\n';
+                    const attacks = data.attacks || [];
+                    
+                    // Create comprehensive CSV with all fields
+                    let csv = 'ID,Device ID,Timestamp,Attack Type,Source IP,Path,Payload,Block Hash,Created At\n';
                     
                     attacks.forEach(attack => {
-                        csv += `"${attack.created_at}","${attack.attack_type}","${attack.source_ip}","${attack.path}","${attack.payload || ''}"\n`;
+                        csv += [
+                            attack.id,
+                            `"${attack.device_id || ''}"`,
+                            attack.timestamp,
+                            `"${attack.attack_type || ''}"`,
+                            `"${attack.source_ip || ''}"`,
+                            `"${attack.path || ''}"`,
+                            `"${attack.payload || ''}"`,
+                            `"${attack.block_hash || ''}"`,
+                            `"${attack.created_at || ''}"`
+                        ].join(',') + '\n';
                     });
+                    
+                    // Display export count
+                    alert(`Exporting ${attacks.length} attacks to CSV file`);
                     
                     const blob = new Blob([csv], { type: 'text/csv' });
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `honeypot-attacks-${new Date().toISOString().split('T')[0]}.csv`;
+                    a.download = `honeypot-attacks-complete-${new Date().toISOString().split('T')[0]}.csv`;
                     a.click();
                     window.URL.revokeObjectURL(url);
                 })

@@ -11,6 +11,7 @@ import sqlite3
 import hashlib
 import json
 import time
+from datetime import datetime
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -418,6 +419,107 @@ def get_predictions():
         
     except Exception as e:
         logger.error(f"Error getting predictions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/frequency')
+def get_attack_frequency():
+    """Get attack frequency data for charts"""
+    try:
+        conn = sqlite3.connect('honeypot.db')
+        cursor = conn.cursor()
+        
+        # Get attacks from last 24 hours, grouped by hour
+        twenty_four_hours_ago = time.time() - (24 * 3600)
+        
+        cursor.execute('''
+            SELECT 
+                strftime('%H', datetime(created_at)) as hour,
+                COUNT(*) as count,
+                attack_type
+            FROM attacks 
+            WHERE created_at >= ?
+            GROUP BY hour, attack_type
+            ORDER BY hour
+        ''', (datetime.fromtimestamp(twenty_four_hours_ago).strftime('%Y-%m-%d %H:%M:%S'),))
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        # Create 24-hour data structure
+        hourly_data = {}
+        attack_type_hourly = {}
+        
+        # Initialize all hours with 0
+        for i in range(24):
+            hour_str = f"{i:02d}"
+            hourly_data[hour_str] = 0
+            attack_type_hourly[hour_str] = {}
+        
+        # Fill in actual data
+        for hour, count, attack_type in results:
+            if hour:
+                hourly_data[hour] = hourly_data.get(hour, 0) + count
+                if hour not in attack_type_hourly:
+                    attack_type_hourly[hour] = {}
+                attack_type_hourly[hour][attack_type] = count
+        
+        # Prepare chart data
+        current_hour = int(datetime.now().strftime('%H'))
+        labels = []
+        data = []
+        
+        # Create labels starting from current hour going back 24 hours
+        for i in range(24):
+            hour = (current_hour - 23 + i) % 24
+            hour_str = f"{hour:02d}:00"
+            labels.append(hour_str)
+            data.append(hourly_data.get(f"{hour:02d}", 0))
+        
+        return jsonify({
+            'labels': labels,
+            'data': data,
+            'hourly_breakdown': attack_type_hourly,
+            'total_attacks_24h': sum(data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting frequency data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/export')
+def export_all_attacks():
+    """Export all attacks for CSV download"""
+    try:
+        conn = sqlite3.connect('honeypot.db')
+        cursor = conn.cursor()
+        
+        # Get ALL attacks, not just recent ones
+        cursor.execute('''
+            SELECT 
+                id, device_id, timestamp, attack_type, source_ip, path, payload, 
+                block_hash, created_at
+            FROM attacks 
+            ORDER BY id DESC
+        ''')
+        
+        columns = [desc[0] for desc in cursor.description]
+        all_attacks = []
+        
+        for row in cursor.fetchall():
+            attack = dict(zip(columns, row))
+            all_attacks.append(attack)
+        
+        conn.close()
+        
+        logger.info(f"Exporting {len(all_attacks)} attacks as CSV data")
+        return jsonify({
+            'attacks': all_attacks,
+            'total': len(all_attacks),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error exporting attacks: {e}")
         return jsonify({'error': str(e)}), 500
 
 def initialize_system():
