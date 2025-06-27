@@ -109,6 +109,41 @@ Server will start on `http://localhost:5000`
    - Try: `http://ESP32_IP/cgi-bin/`
    - Try: `http://ESP32_IP/HNAP1/`
 
+## 🤖 ESP32 Attack Simulator
+
+### **No Hardware? No Problem!**
+Test the complete system without physical ESP32 devices using our advanced attack simulator:
+
+```bash
+# Interactive mode (recommended for beginners)
+python simulate_esp32.py
+
+# Quick test with 5 random attacks  
+python simulate_esp32.py --mode wave --attacks 5
+
+# Simulate SQL injection campaign
+python simulate_esp32.py --mode campaign --attack-types sql_injection
+
+# DDoS stress test
+python simulate_esp32.py --mode ddos --intensity high --duration 60
+```
+
+### **Simulator Features:**
+- ✅ **15 Attack Types**: Covers all major attack categories
+- ✅ **5 Virtual Devices**: Simulates multiple ESP32 honeypots
+- ✅ **Realistic IPs**: Uses authentic attacker IP patterns
+- ✅ **ML Integration**: Full integration with AI classification
+- ✅ **Interactive Mode**: Menu-driven testing interface
+- ✅ **Campaign Mode**: Targeted attack simulations
+- ✅ **DDoS Testing**: Stress testing capabilities
+
+### **Quick Start:**
+1. **Start the server**: `python server_enhanced.py`
+2. **Run simulator**: `python simulate_esp32.py`
+3. **View results**: Open http://localhost:5001
+
+📖 **Detailed Guide**: See `ESP32_SIMULATOR_GUIDE.md` for complete usage instructions.
+
 ## 📊 Dashboard Features
 
 ### Real-time Monitoring:

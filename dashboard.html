@@ -376,7 +376,7 @@
                     document.getElementById('totalAttacks').textContent = data.total_attacks || 0;
                     document.getElementById('uniqueIPs').textContent = data.unique_ips || 0;
                     document.getElementById('blockchainBlocks').textContent = data.blockchain_blocks || 0;
-                    document.getElementById('mlStatus').textContent = data.ml_model_trained ? '✅' : '❌';
+                    document.getElementById('mlStatus').textContent = data.ml_model_loaded ? '✅' : '❌';
                     
                     updateAttackTypesChart(data.attack_types || {});
                     document.getElementById('statsUpdated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
@@ -430,7 +430,7 @@
                 .then(response => response.json())
                 .then(data => {
                     const blockchainStatus = document.getElementById('blockchainStatus');
-                    const blocks = data.blocks || [];
+                    const blocks = data.recent_blocks || [];
                     
                     if (blocks.length === 0) {
                         blockchainStatus.innerHTML = '<div class="loading">No blocks in blockchain</div>';
@@ -466,12 +466,12 @@
                 .then(data => {
                     const mlPredictions = document.getElementById('mlPredictions');
                     
-                    if (!data.model_trained) {
+                    if (!data.model_status || !data.model_status.loaded) {
                         mlPredictions.innerHTML = '<div class="loading">ML model not yet trained<br>Need more attack data...</div>';
                         return;
                     }
                     
-                    const predictions = data.predictions || [];
+                    const predictions = data.prediction_distribution || [];
                     if (predictions.length === 0) {
                         mlPredictions.innerHTML = '<div class="loading">No predictions available</div>';
                         return;
@@ -479,14 +479,14 @@
                     
                     let html = '<div class="ml-prediction">🤖 AI Model Active - Analyzing attacks in real-time</div>';
                     html += '<table class="attack-table">';
-                    html += '<tr><th>IP</th><th>Original</th><th>AI Prediction</th><th>Confidence</th></tr>';
+                    html += '<tr><th>Attack Type</th><th>Predictions</th><th>Confidence</th><th>Trend</th></tr>';
                     
                     predictions.slice(0, 8).forEach(pred => {
                         html += '<tr>';
-                        html += `<td>${pred.source_ip}</td>`;
-                        html += `<td><span class="attack-type ${pred.original_type}">${pred.original_type}</span></td>`;
-                        html += `<td><span class="attack-type ${pred.ml_prediction}">${pred.ml_prediction}</span></td>`;
+                        html += `<td><span class="attack-type ${pred.type}">${pred.type}</span></td>`;
+                        html += `<td>${pred.count}</td>`;
                         html += `<td>High</td>`;
+                        html += `<td>↗️</td>`;
                         html += '</tr>';
                     });
                     
@@ -520,13 +520,18 @@
                 frequencyChart.destroy();
             }
             
+            // Process hourly frequency data from API
+            const hourlyData = data.hourly_frequency || [];
+            const labels = hourlyData.map(item => item.hour + ':00');
+            const chartData = hourlyData.map(item => item.count);
+            
             frequencyChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.labels || [],
+                    labels: labels,
                     datasets: [{
                         label: 'Attacks per Hour',
-                        data: data.data || [],
+                        data: chartData,
                         borderColor: '#00ff88',
                         backgroundColor: 'rgba(0, 255, 136, 0.1)',
                         fill: true,

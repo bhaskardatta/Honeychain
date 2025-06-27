@@ -26,6 +26,7 @@ CORS(app)
 # Global variables
 blockchain = []
 model_data = None
+DATABASE_PATH = 'honeypot.db'
 
 class Block:
     def __init__(self, index, timestamp, data, previous_hash):
@@ -50,7 +51,7 @@ class Block:
 
 def init_database():
     """Initialize SQLite database"""
-    conn = sqlite3.connect('honeypot.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -185,11 +186,11 @@ def predict_attack_type(attack_data):
         confidence = max(probabilities)
         
         logger.info(f"ML Prediction: {predicted_label} (confidence: {confidence:.2f})")
-        return predicted_label
+        return predicted_label, confidence
         
     except Exception as e:
         logger.error(f"ML prediction error: {e}")
-        return fallback_classification(attack_data)
+        return fallback_classification(attack_data), 0.5
 
 def fallback_classification(attack_data):
     """Enhanced fallback classification"""
@@ -258,7 +259,7 @@ def add_block(data):
 
 def store_attack(attack_data, block_hash):
     """Store attack data in database"""
-    conn = sqlite3.connect('honeypot.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -286,7 +287,7 @@ def receive_attack():
             return jsonify({'error': 'No data received'}), 400
         
         # Classify attack using enhanced ML
-        predicted_type = predict_attack_type(attack_data)
+        predicted_type, confidence = predict_attack_type(attack_data)
         attack_data['ml_classification'] = predicted_type
         
         # Add to blockchain
@@ -299,6 +300,7 @@ def receive_attack():
                 'block_hash': block.hash,
                 'block_index': block.index,
                 'ml_classification': predicted_type,
+                'confidence': confidence,
                 'model_accuracy': model_data['accuracy'] if model_data else 'N/A'
             })
         else:
@@ -321,7 +323,7 @@ def dashboard():
 def get_stats():
     """Get comprehensive attack statistics"""
     try:
-        conn = sqlite3.connect('honeypot.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
         
         # Total attacks
@@ -377,7 +379,7 @@ def get_stats():
 def export_all_attacks():
     """Export all attacks for analysis"""
     try:
-        conn = sqlite3.connect('honeypot.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -418,6 +420,147 @@ def get_model_info():
             'model_loaded': False,
             'message': 'Production model not available'
         })
+
+@app.route('/blockchain')
+def get_blockchain():
+    """Get blockchain status and recent blocks"""
+    try:
+        # Get last 10 blocks
+        recent_blocks = blockchain[-10:] if len(blockchain) > 10 else blockchain
+        
+        return jsonify({
+            'total_blocks': len(blockchain),
+            'latest_block': blockchain[-1].__dict__ if blockchain else None,
+            'recent_blocks': [block.__dict__ for block in recent_blocks],
+            'blockchain_valid': verify_blockchain()
+        })
+    except Exception as e:
+        logger.error(f"Error getting blockchain: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/predictions')
+def get_predictions():
+    """Get ML prediction statistics"""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Get prediction distribution
+        cursor.execute('''
+            SELECT attack_type, COUNT(*) as count 
+            FROM attacks 
+            GROUP BY attack_type 
+            ORDER BY count DESC
+        ''')
+        predictions = cursor.fetchall()
+        
+        # Get recent predictions with confidence
+        cursor.execute('''
+            SELECT attack_type, created_at 
+            FROM attacks 
+            ORDER BY created_at DESC 
+            LIMIT 20
+        ''')
+        recent = cursor.fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            'prediction_distribution': [{'type': p[0], 'count': p[1]} for p in predictions],
+            'recent_predictions': [{'type': r[0], 'timestamp': r[1]} for r in recent],
+            'model_status': {
+                'loaded': model_data is not None,
+                'accuracy': model_data['accuracy'] if model_data else 0,
+                'model_name': model_data['model_name'] if model_data else 'None'
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting predictions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/frequency')
+def get_frequency():
+    """Get attack frequency data for charts"""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Get attacks per hour for last 24 hours
+        cursor.execute('''
+            SELECT 
+                strftime('%H', datetime(created_at)) as hour,
+                COUNT(*) as count
+            FROM attacks 
+            WHERE datetime(created_at) >= datetime('now', '-24 hours')
+            GROUP BY strftime('%H', datetime(created_at))
+            ORDER BY hour
+        ''')
+        hourly = cursor.fetchall()
+        
+        # Get attacks per day for last 30 days
+        cursor.execute('''
+            SELECT 
+                DATE(created_at) as date,
+                COUNT(*) as count
+            FROM attacks 
+            WHERE datetime(created_at) >= datetime('now', '-30 days')
+            GROUP BY DATE(created_at)
+            ORDER BY date
+        ''')
+        daily = cursor.fetchall()
+        
+        # Get top source IPs
+        cursor.execute('''
+            SELECT source_ip, COUNT(*) as count
+            FROM attacks
+            GROUP BY source_ip
+            ORDER BY count DESC
+            LIMIT 10
+        ''')
+        top_ips = cursor.fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            'hourly_frequency': [{'hour': h[0], 'count': h[1]} for h in hourly],
+            'daily_frequency': [{'date': d[0], 'count': d[1]} for d in daily],
+            'top_source_ips': [{'ip': ip[0], 'count': ip[1]} for ip in top_ips]
+        })
+    except Exception as e:
+        logger.error(f"Error getting frequency data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'system': {
+            'database': 'connected',
+            'blockchain': f'{len(blockchain)} blocks',
+            'ml_model': 'loaded' if model_data else 'not loaded'
+        }
+    })
+
+def verify_blockchain():
+    """Verify blockchain integrity"""
+    if len(blockchain) <= 1:
+        return True
+    
+    for i in range(1, len(blockchain)):
+        current_block = blockchain[i]
+        previous_block = blockchain[i-1]
+        
+        # Check if current block's previous hash matches previous block's hash
+        if current_block.previous_hash != previous_block.hash:
+            return False
+        
+        # Check if current block's hash is valid
+        if current_block.hash != current_block.calculate_hash():
+            return False
+    
+    return True
 
 def initialize_system():
     """Initialize the enhanced honeypot system"""
