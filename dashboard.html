@@ -172,8 +172,25 @@
         
         .chart-container {
             position: relative;
-            height: 300px;
+            height: 350px;
             margin-top: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .chart-container:hover {
+            border-color: rgba(0, 255, 136, 0.4);
+            box-shadow: 
+                0 12px 40px rgba(0, 0, 0, 0.4),
+                0 0 20px rgba(0, 255, 136, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
         
         .blockchain-block {
@@ -319,7 +336,14 @@
         
         <!-- Attack Frequency Chart -->
         <div class="card">
-            <h3>📈 Attack Frequency (Last 24 Hours)</h3>
+            <h3>📈 Attack Frequency & Types (Last 24 Hours)</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="color: #888; font-size: 12px;">Real-time multi-layer attack analysis</span>
+                <div>
+                    <span style="color: #00ff88; font-size: 12px;">● Total Attacks (Left)</span>
+                    <span style="color: #ff4444; font-size: 12px; margin-left: 15px;">● Attack Types (Right)</span>
+                </div>
+            </div>
             <div class="chart-container">
                 <canvas id="frequencyChart"></canvas>
             </div>
@@ -522,44 +546,201 @@
             
             // Process hourly frequency data from API
             const hourlyData = data.hourly_frequency || [];
+            const attackTypesHourly = data.attack_types_hourly || {};
             const labels = hourlyData.map(item => item.hour + ':00');
             const chartData = hourlyData.map(item => item.count);
+            
+            // Create gradient for the main chart
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(0, 255, 136, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(0, 255, 136, 0.4)');
+            gradient.addColorStop(1, 'rgba(0, 255, 136, 0.1)');
+            
+            const borderGradient = ctx.createLinearGradient(0, 0, 0, 400);
+            borderGradient.addColorStop(0, '#00ff88');
+            borderGradient.addColorStop(0.5, '#00dd77');
+            borderGradient.addColorStop(1, '#00bb66');
+            
+            // Prepare datasets
+            const datasets = [{
+                label: 'Total Attacks',
+                data: chartData,
+                borderColor: borderGradient,
+                backgroundColor: gradient,
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#00ff88',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 3,
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                pointHoverBackgroundColor: '#ffffff',
+                pointHoverBorderColor: '#00ff88',
+                pointHoverBorderWidth: 3,
+                borderWidth: 3,
+                yAxisID: 'y'
+            }];
+            
+            // Add attack type datasets
+            const attackTypeColors = {
+                'sql_injection': '#ff4444',
+                'brute_force_credential': '#ffaa00',
+                'xss_attack': '#8800ff',
+                'command_injection': '#00aaff'
+            };
+            
+            Object.keys(attackTypesHourly).forEach(attackType => {
+                const typeData = [];
+                for (let hour = 0; hour < 24; hour++) {
+                    const hourStr = hour.toString().padStart(2, '0');
+                    typeData.push(attackTypesHourly[attackType][hourStr] || 0);
+                }
+                
+                datasets.push({
+                    label: attackType.replace('_', ' ').toUpperCase(),
+                    data: typeData,
+                    borderColor: attackTypeColors[attackType] || '#ffffff',
+                    backgroundColor: (attackTypeColors[attackType] || '#ffffff') + '20',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    borderWidth: 2,
+                    yAxisID: 'y1'
+                });
+            });
             
             frequencyChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Attacks per Hour',
-                        data: chartData,
-                        borderColor: '#00ff88',
-                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: '#00ff88',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 4
-                    }]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
                     scales: {
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#ffffff' }
+                            grid: { 
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                lineWidth: 1
+                            },
+                            ticks: { 
+                                color: '#00ff88',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Total Attacks',
+                                color: '#00ff88',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: { 
+                                color: '#ffffff',
+                                font: {
+                                    size: 10
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Attack Types',
+                                color: '#ffffff',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            }
                         },
                         x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#ffffff' }
+                            grid: { 
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                lineWidth: 1
+                            },
+                            ticks: { 
+                                color: '#ffffff',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Hour of Day',
+                                color: '#ffffff',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
                         }
                     },
                     plugins: {
                         legend: {
-                            labels: { color: '#ffffff' }
+                            labels: { 
+                                color: '#ffffff',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#00ff88',
+                            bodyColor: '#ffffff',
+                            borderColor: '#00ff88',
+                            borderWidth: 2,
+                            cornerRadius: 10,
+                            displayColors: true,
+                            callbacks: {
+                                title: function(context) {
+                                    return `Hour: ${context[0].label}`;
+                                },
+                                label: function(context) {
+                                    return `Attacks: ${context.parsed.y}`;
+                                },
+                                afterLabel: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed.y / total) * 100).toFixed(1);
+                                    return `${percentage}% of daily attacks`;
+                                }
+                            }
                         }
+                    },
+                    elements: {
+                        line: {
+                            borderCapStyle: 'round',
+                            borderJoinStyle: 'round'
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeInOutQuart'
                     }
                 }
             });
