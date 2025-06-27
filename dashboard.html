@@ -338,7 +338,10 @@
         <div class="card">
             <h3>📈 Attack Frequency & Types (Last 24 Hours)</h3>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <span style="color: #888; font-size: 12px;">Real-time multi-layer attack analysis</span>
+                <div>
+                    <span style="color: #888; font-size: 12px;">Real-time multi-layer attack analysis</span>
+                    <button id="chartToggle" onclick="toggleChartView()" style="margin-left: 15px; background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 11px; cursor: pointer;">📊 Switch View</button>
+                </div>
                 <div>
                     <span style="color: #00ff88; font-size: 12px;">● Total Attacks (Left)</span>
                     <span style="color: #ff4444; font-size: 12px; margin-left: 15px;">● Attack Types (Right)</span>
@@ -537,6 +540,25 @@
                 });
         }
         
+        // Chart view toggle functionality
+        let chartViewMode = 'multi'; // 'multi' or 'single'
+        
+        function toggleChartView() {
+            chartViewMode = chartViewMode === 'multi' ? 'single' : 'multi';
+            const toggleBtn = document.getElementById('chartToggle');
+            
+            if (chartViewMode === 'single') {
+                toggleBtn.textContent = '📈 Multi View';
+                toggleBtn.style.background = '#28a745';
+            } else {
+                toggleBtn.textContent = '📊 Single View';
+                toggleBtn.style.background = '#007bff';
+            }
+            
+            // Reload the chart with new view mode
+            loadFrequencyChart();
+        }
+        
         function updateFrequencyChart(data) {
             const ctx = document.getElementById('frequencyChart').getContext('2d');
             
@@ -561,7 +583,7 @@
             borderGradient.addColorStop(0.5, '#00dd77');
             borderGradient.addColorStop(1, '#00bb66');
             
-            // Prepare datasets
+            // Prepare datasets based on view mode
             const datasets = [{
                 label: 'Total Attacks',
                 data: chartData,
@@ -581,34 +603,36 @@
                 yAxisID: 'y'
             }];
             
-            // Add attack type datasets
-            const attackTypeColors = {
-                'sql_injection': '#ff4444',
-                'brute_force_credential': '#ffaa00',
-                'xss_attack': '#8800ff',
-                'command_injection': '#00aaff'
-            };
-            
-            Object.keys(attackTypesHourly).forEach(attackType => {
-                const typeData = [];
-                for (let hour = 0; hour < 24; hour++) {
-                    const hourStr = hour.toString().padStart(2, '0');
-                    typeData.push(attackTypesHourly[attackType][hourStr] || 0);
-                }
+            // Add attack type datasets only in multi view mode
+            if (chartViewMode === 'multi') {
+                const attackTypeColors = {
+                    'sql_injection': '#ff4444',
+                    'brute_force_credential': '#ffaa00',
+                    'xss_attack': '#8800ff',
+                    'command_injection': '#00aaff'
+                };
                 
-                datasets.push({
-                    label: attackType.replace('_', ' ').toUpperCase(),
-                    data: typeData,
-                    borderColor: attackTypeColors[attackType] || '#ffffff',
-                    backgroundColor: (attackTypeColors[attackType] || '#ffffff') + '20',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    borderWidth: 2,
-                    yAxisID: 'y1'
+                Object.keys(attackTypesHourly).forEach(attackType => {
+                    const typeData = [];
+                    for (let hour = 0; hour < 24; hour++) {
+                        const hourStr = hour.toString().padStart(2, '0');
+                        typeData.push(attackTypesHourly[attackType][hourStr] || 0);
+                    }
+                    
+                    datasets.push({
+                        label: attackType.replace('_', ' ').toUpperCase(),
+                        data: typeData,
+                        borderColor: attackTypeColors[attackType] || '#ffffff',
+                        backgroundColor: (attackTypeColors[attackType] || '#ffffff') + '20',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    });
                 });
-            });
+            }
             
             frequencyChart = new Chart(ctx, {
                 type: 'line',
@@ -652,7 +676,7 @@
                         },
                         y1: {
                             type: 'linear',
-                            display: true,
+                            display: chartViewMode === 'multi',
                             position: 'right',
                             beginAtZero: true,
                             grid: {
